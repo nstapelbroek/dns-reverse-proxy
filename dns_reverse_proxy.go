@@ -126,15 +126,13 @@ func route(w dns.ResponseWriter, req *dns.Msg) {
 	}
 
 	lcName := strings.ToLower(req.Question[0].Name)
-	for name, addrs := range routes {
-		if strings.HasSuffix(lcName, name) {
-			addr := addrs[0]
-			if n := len(addrs); n > 1 {
-				addr = addrs[rand.Intn(n)]
-			}
-			proxy(addr, w, req)
-			return
+	if proxyAddrs := findProxyRoute(lcName, routes); len(proxyAddrs) > 0 {
+		addr := proxyAddrs[0]
+		if n := len(proxyAddrs); n > 1 {
+			addr = proxyAddrs[rand.Intn(n)]
 		}
+		proxy(addr, w, req)
+		return
 	}
 
 	if *defaultServer == "" {
@@ -143,6 +141,23 @@ func route(w dns.ResponseWriter, req *dns.Msg) {
 	}
 
 	proxy(*defaultServer, w, req)
+}
+
+func findProxyRoute(lcName string, routes map[string][]string) []string {
+	for hostName, addrs := range routes {
+		segments := strings.Split(hostName, "*")
+		if len(segments) == 2 {
+			if strings.HasPrefix(lcName, segments[0]) && strings.HasSuffix(lcName, segments[1]) {
+				return addrs
+			}
+		}
+
+		if strings.HasSuffix(lcName, hostName) {
+			return addrs
+		}
+	}
+
+	return []string{}
 }
 
 func isTransfer(req *dns.Msg) bool {
